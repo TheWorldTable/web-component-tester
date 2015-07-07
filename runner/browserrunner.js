@@ -12,10 +12,13 @@ var chalk     = require('chalk');
 var cleankill = require('cleankill');
 var wd        = require('wd');
 
+var ConcurrentBrowsersCount = 0;
+
 // Browser abstraction, responsible for spinning up a browser instance via wd.js and
 // executing runner.html test files passed in options.files
 function BrowserRunner(emitter, capabilities, options, doneCallback) {
   this.timeout = options.testTimeout;
+  this.maxConcurrentBrowsers = options.maxConcurrentBrowsers;
   this.emitter = emitter;
   this.options = options;
   this.def     = capabilities;
@@ -60,14 +63,24 @@ function BrowserRunner(emitter, capabilities, options, doneCallback) {
   delete webdriverCapabilities.url;
   delete webdriverCapabilities.sessionId;
 
-  // Reusing a session?
-  if (this.def.sessionId) {
-    this.browser.attach(this.def.sessionId, function(error) {
-      this._init(error, this.def.sessionId);
-    }.bind(this));
-  } else {
-    this.browser.init(webdriverCapabilities, this._init.bind(this));
-  }
+  var self = this;
+  setInterval(function () {
+    var interval = this;
+    (function () {
+      if (!this.maxConcurrentBrowsers || ConcurrentBrowsersCount < this.maxConcurrentBrowsers) {
+        ++ConcurrentBrowsersCount;
+        clearInterval(interval);
+        // Reusing a session?
+          if (this.def.sessionId) {
+            this.browser.attach(this.def.sessionId, function (error) {
+              this._init(error, this.def.sessionId);
+            });
+          } else {
+            this.browser.init(webdriverCapabilities, this._init.bind(this));
+          }
+        }
+    }.bind(self)());
+  }, 100);
 }
 
 BrowserRunner.prototype._init = function _init(error, sessionId) {
@@ -137,6 +150,8 @@ BrowserRunner.prototype.done = function done(error) {
   if (this.options.persistent) return;
 
   if (this.timeoutId) clearTimeout(this.timeoutId);
+  --ConcurrentBrowsersCount;
+
   // Don't double-quit.
   if (!this.browser) return;
   var browser = this.browser;
