@@ -78,9 +78,11 @@ function BrowserRunner(emitter, capabilities, options, doneCallback) {
           } else {
             this.browser.init(webdriverCapabilities, this._init.bind(this));
           }
-        }
+        } else {
+          this.extendTimeout();
+      }
     }.bind(self)());
-  }, 100);
+  }, 500);
 }
 
 BrowserRunner.prototype._init = function _init(error, sessionId) {
@@ -147,10 +149,11 @@ BrowserRunner.prototype.onEvent = function onEvent(event, data) {
 
 BrowserRunner.prototype.done = function done(error) {
   // No quitting for you!
+  --ConcurrentBrowsersCount;
+
   if (this.options.persistent) return;
 
   if (this.timeoutId) clearTimeout(this.timeoutId);
-  --ConcurrentBrowsersCount;
 
   // Don't double-quit.
   if (!this.browser) return;
